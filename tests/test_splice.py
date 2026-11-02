@@ -15,6 +15,7 @@ from jasna.media.splice import (
     SmartRenderCompatibilityError,
     _analyze_packet_reordering,
     _is_safe_random_access_packet,
+    _next_access_unit_offset,
     build_splice_plan,
     create_copy_fragment,
     resolve_smart_encoder_settings,
@@ -364,6 +365,13 @@ def test_random_access_classifier_accepts_annex_b_h264_idr() -> None:
         4,
         length_prefixed=False,
     )
+
+
+@pytest.mark.parametrize("codec", ["mpeg4", "vp9", "av1"])
+def test_non_nal_codecs_bypass_nal_access_unit_checks(codec: str) -> None:
+    payload = b"\x00\x00\x01\xb6\x10\x20\x30"
+    assert _is_safe_random_access_packet(payload, codec, 4, length_prefixed=False)
+    assert _next_access_unit_offset(payload, codec=codec, length_size=4, length_prefixed=False) == len(payload)
 
 
 def test_copy_fragment_seeks_before_demux(tmp_path: Path) -> None:

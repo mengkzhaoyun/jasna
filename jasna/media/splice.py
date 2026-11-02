@@ -388,6 +388,8 @@ def _next_access_unit_offset(
 ) -> int:
     """Where NAL units of the next picture begin in a packet that carries them after its
     own picture (some muxers store the next AUD/SEI there); ``len(data)`` when none do."""
+    if codec not in _VCL_NAL_TYPES:
+        return len(data)
     units = _nal_units(data, codec=codec, length_size=length_size, length_prefixed=length_prefixed)
     vcl = [i for i, (_, nal_type) in enumerate(units) if nal_type in _VCL_NAL_TYPES[codec]]
     after_picture = units[vcl[-1] + 1:] if vcl else ()
@@ -404,7 +406,7 @@ def _is_safe_random_access_packet(
     *,
     length_prefixed: bool,
 ) -> bool:
-    if codec == "av1":
+    if codec not in {"h264", "hevc"}:
         return True
     nal_types = [
         nal_type

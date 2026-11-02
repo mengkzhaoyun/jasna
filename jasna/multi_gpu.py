@@ -713,10 +713,15 @@ def _encode_unrestored_span(
         if entered:
             encoder.__exit__(None, None, None)
 
-    if not cancel_event.is_set() and partial_nut.is_file():
-        with partial_nut.open("r+b") as stream:
-            os.fsync(stream.fileno())
-        commit_file(partial_nut, final_nut)
+    if cancel_event.is_set():
+        return
+    if not partial_nut.is_file():
+        raise RuntimeError(
+            f"Unrestored span [{span.start_pts}, {span.end_pts}) produced no frames for {final_nut.name}"
+        )
+    with partial_nut.open("r+b") as stream:
+        os.fsync(stream.fileno())
+    commit_file(partial_nut, final_nut)
 
 
 def _build_cli_args_for_span(

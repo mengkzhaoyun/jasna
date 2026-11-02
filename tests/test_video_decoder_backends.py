@@ -411,6 +411,21 @@ def test_vali_source_seek_with_stride_reanchors_at_seek(monkeypatch) -> None:
     assert [pts for _batch, pts in batches] == [[30720, 31744]]
 
 
+def test_vali_source_seek_does_not_double_add_nonzero_start_pts(monkeypatch) -> None:
+    import dataclasses
+
+    # Stream starts at 100s (start_pts=3000 at 1/30s). Seeking 2.0s into the stream
+    # targets pts=3060; VALI's SeekDecode offsets seek_ts by start_time internally
+    # and may return keyframe lead-in frames (3030, 3059) before 3060.
+    script = [_frame(3000), _frame(3030), _frame(3059), _frame(3060), _frame(3061), _EOF]
+    calls, _converter = _install_fake_vali(monkeypatch, script)
+    meta = dataclasses.replace(_metadata(), start_pts=3000)
+    source = module._ValiFrameSource("input.mp4", 2, torch.device("cpu"), meta, 1)
+    batches = list(source.frames(2.0))
+    assert calls[1].seek_ts == 2.0
+    assert [pts for _batch, pts in batches] == [[3060, 3061]]
+
+
 @pytest.mark.skipif(
     not torch.cuda.is_available() or not TEST_CLIP.exists() or not _vali_fork_available(),
     reason="needs a GPU, the test clip and the python_vali fork",

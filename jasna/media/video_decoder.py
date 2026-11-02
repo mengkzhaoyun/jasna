@@ -254,20 +254,20 @@ class _ValiFrameSource:
             self.is_10bit,
             self.device,
         )
-        # VALI seeks in absolute stream seconds while the reader contract is
-        # seconds past the stream start, so shift by the start offset. VALI's
-        # own StartTime is unreliable (wrong scale), use the probed metadata.
+        # VALI's SeekDecode already offsets seek_ts by stream->start_time before
+        # calling avformat_seek_file, while its internal post-seek skip loop adds
+        # stream->start_time a second time to frame->pts when start_pts > 0 and
+        # stops on the keyframe. Pass seek_ts directly and skip frames before min_pts.
         seek_ctx = None
+        min_pts = self.metadata.start_pts
         # Nothing is decoded past the first frame yet, so the start needs no seek.
         # VALI's own seek to 0 jumps to the next keyframe when the first one lies
         # before the stream start (an MP4 cut mid-GOP).
         if seek_ts == 0 and self._first_pts is not None:
             seek_ts = None
         if seek_ts is not None:
-            start_seconds = float(
-                self.metadata.start_pts * self.metadata.time_base
-            )
-            seek_ctx = self._vali.SeekContext(seek_ts=seek_ts + start_seconds)
+            min_pts += round(seek_ts / self.metadata.time_base)
+            seek_ctx = self._vali.SeekContext(seek_ts=seek_ts)
         pending_pts = self._first_pts if seek_ctx is None else None
         exhausted = seek_ctx is None and self._first_pts is None
         self._first_pts = None
@@ -285,8 +285,8 @@ class _ValiFrameSource:
                     if frame_pts is None:
                         exhausted = True
                         break
-                # The hidden lead-in of an MP4 cut mid-GOP, which PyAV's decoders drop.
-                if frame_pts < self.metadata.start_pts:
+                # Drop hidden lead-in before stream start or keyframe lead-in before seek_ts.
+                if frame_pts < min_pts:
                     continue
                 selected = frame_index % self.frame_stride == 0
                 frame_index += 1
