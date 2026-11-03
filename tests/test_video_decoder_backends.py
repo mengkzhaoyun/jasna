@@ -142,7 +142,8 @@ def test_pyav_sw_backend_skips_hwaccel_and_amf(monkeypatch) -> None:
         assert container.streams.video[0].codec_context.thread_type == "AUTO"
 
 
-def test_auto_backend_decodes_vc1_with_pyav_hwaccel(monkeypatch) -> None:
+@pytest.mark.parametrize("codec", ["vc1", "mpeg4", "msmpeg4v3"])
+def test_auto_backend_decodes_vc1_with_pyav_hwaccel(monkeypatch, codec: str) -> None:
     monkeypatch.setenv("JASNA_DECODE_BACKEND", "auto")
     vali_factory = MagicMock()
     monkeypatch.setattr(module, "_ValiFrameSource", vali_factory)
@@ -150,7 +151,7 @@ def test_auto_backend_decodes_vc1_with_pyav_hwaccel(monkeypatch) -> None:
     monkeypatch.setattr(module, "vendor_for_device", lambda _device: AcceleratorVendor.NVIDIA)
     monkeypatch.setattr(module, "current_stream", lambda _device: None)
     metadata = _metadata()
-    metadata.codec_name = "vc1"
+    metadata.codec_name = codec
     reader = module.VideoReader("input.mkv", 4, torch.device("cuda:0"), metadata)
     reader.__enter__()
     vali_factory.assert_not_called()

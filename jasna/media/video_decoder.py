@@ -44,10 +44,12 @@ _DECODE_BACKENDS = ("auto", "vali", "pyav-hw", "pyav-sw")
 _NVDEC_DECODER_OVERRIDES = {"av1": "av1"}
 _NVDEC_MIN_CODED_SIZE = {"av1": (128, 128)}
 
-# VALI hands VC-1 to NVIDIA's own parser, which drops every frame before the
-# first keyframe and, outside ASF, replaces missing pts with a 30 fps count
-# from 0. FFmpeg's VC-1 decoder with the NVDEC hwaccel keeps both.
-_CODECS_SKIPPING_VALI = frozenset({"vc1"})
+# VALI hands VC-1 and MPEG-4 Part 2 (e.g. DivX/Xvid in AVI) to NVIDIA's CUVID
+# parser, which drops every frame before the first keyframe and replaces packet
+# pts after flush/seek with a count from 0 (causing SeekDecode to skip an extra
+# target_pts frames and hit EOF past the midpoint). FFmpeg's decoders with the
+# NVDEC hwaccel preserve the stream timestamps.
+_CODECS_SKIPPING_VALI = frozenset({"vc1", "mpeg4", "msmpeg4v3", "msmpeg4v2", "msmpeg4v1"})
 
 
 class VideoDecodeError(RuntimeError):
@@ -65,6 +67,8 @@ def _decode_backend() -> str:
 
 
 def _cuda_hwaccel(device: torch.device) -> HWAccel:
+    if device.type == "cuda" and torch.cuda.is_available():
+        set_device(device)
     hwaccel = HWAccel(
         "cuda",
         device=str(device.index or 0),

@@ -876,6 +876,8 @@ def _run_l2_collaborative_track_denoise(
 ) -> None:
     """L2 Track-level Multi-GPU parallelism: split ``TrackPlan``s across multiple GPUs so each
     GPU encodes and denoises a disjoint subset of tracks into ``main_ltx_dir``."""
+    from jasna.media.video_decoder import _CODECS_SKIPPING_VALI
+
     tracks = list(span_plans[0]) if span_plans else []
     pending_tracks = [
         plan for plan in tracks
@@ -943,6 +945,8 @@ def _run_l2_collaborative_track_denoise(
         env.setdefault("LC_ALL", "C.UTF-8")
         env["CUDA_VISIBLE_DEVICES"] = physical_cuda_visible_token(logical_gpu)
         env["JASNA_SMART_PIPELINE"] = "0"
+        if span_meta.codec_name in _CODECS_SKIPPING_VALI:
+            env.setdefault("JASNA_DECODE_BACKEND", "pyav-hw")
         proc = subprocess.Popen(cmd, env=env, **subprocess_no_window_kwargs())
         try:
             while proc.poll() is None:
@@ -1157,6 +1161,8 @@ def _render_mosaic_span_on_gpu(
             )
 
         if release_bin is not None and not config.ltx_trial:
+            from jasna.media.video_decoder import _CODECS_SKIPPING_VALI
+
             cmd = [
                 str(release_bin),
                 *_build_cli_args_for_span(config, span_in_mp4, span_out_mp4, span_dir, ltx_fast=ltx_fast),
@@ -1168,6 +1174,8 @@ def _render_mosaic_span_on_gpu(
             env["CUDA_VISIBLE_DEVICES"] = physical_cuda_visible_token(logical_gpu)
             env["JASNA_SMART_PIPELINE"] = "0"
             env["JASNA_WORKER_SUBPROCESS"] = "1"
+            if metadata.codec_name in _CODECS_SKIPPING_VALI:
+                env.setdefault("JASNA_DECODE_BACKEND", "pyav-hw")
             completed = subprocess.run(cmd, env=env, check=False, **subprocess_no_window_kwargs())
             if completed.returncode != 0:
                 raise RuntimeError(
