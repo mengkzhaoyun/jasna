@@ -451,8 +451,8 @@ while IFS= read -r -d '' filepath; do
 	filename="$(basename "$filepath")"
 	name="${filename%.*}"
 
-	# 跳过已经是 -U 结尾的输出文件
-	if [[ "$name" == *-U ]]; then
+	# 跳过已经是 -U.mp4 结尾的输出文件
+	if [[ "${filename,,}" == *-u.mp4 ]]; then
 		continue
 	fi
 
