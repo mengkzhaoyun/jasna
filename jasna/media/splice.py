@@ -760,14 +760,38 @@ def mux_final_output(
             transcode_codec = transcoded_subtitles.get(stream.index)
             if transcode_codec is not None:
                 args += [f"-c:s:{output_index}", transcode_codec]
+    tag: str | None = None
     if destination.suffix.lower() in MOV_SUFFIXES:
-        tag = {"h264": "avc3", "hevc": "hev1", "av1": "av01"}[codec]
+        tag = {"h264": "avc1", "hevc": "hvc1", "av1": "av01"}[codec]
         args += ["-tag:v:0", tag, "-movflags", "+faststart"]
     args.append(str(temporary))
+    normalized_temporary: Path | None = None
     try:
         _run_ffmpeg(args, purpose=f"mux smart-render output {destination.name}")
-        os.replace(temporary, destination)
+        if destination.suffix.lower() in MOV_SUFFIXES and codec in {"h264", "hevc"}:
+            # Normalize DTS timeline: eliminate B-frame splice collisions at fragment boundaries
+            normalized_temporary = destination.with_name(f".{destination.stem}.normalized{destination.suffix}")
+            _run_ffmpeg(
+                [
+                    "-y",
+                    "-fflags", "+genpts+igndts",
+                    "-i", str(temporary),
+                    "-c", "copy",
+                    *([ "-tag:v:0", tag ] if tag else []),
+                    "-movflags", "+faststart",
+                    str(normalized_temporary),
+                ],
+                purpose=f"normalize smart-render monotonic DTS for {destination.name}",
+            )
+            os.replace(normalized_temporary, destination)
+        else:
+            os.replace(temporary, destination)
     finally:
+        if normalized_temporary is not None:
+            try:
+                normalized_temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
         try:
             temporary.unlink(missing_ok=True)
         except OSError:
